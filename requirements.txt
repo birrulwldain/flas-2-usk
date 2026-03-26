@@ -1,0 +1,7 @@
+selenium>=4.0.0
+pyTelegramBotAPI
+schedule
+python-dotenv
+google-genai
+webdriver-manager
+Pillow

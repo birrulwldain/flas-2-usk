@@ -1,0 +1,27 @@
+Jadwal Kuliah (Birrul) - Semester Ini
+=====================================================
+
+Rabu:
+- 14.00 - 15.40 | SPEKTROSKOPI OPTIK (Kelas A)
+- 16.35 - 18.15 | INSTRUMENTASI OPTIK (Kelas A)
+
+Kamis:
+- 14.00 - 15.40 | PROPOSAL TESIS (Kelas B)
+- 14.00 - 15.40 | METODE PENULISAN ILMIAH (Kelas A)
+
+Jumat:
+- 08.00 - 09.40 | ANALISIS DATA TINGKAT LANJUT (Kelas A)
+- 09.50 - 11.30 | SPEKTROSKOPI LASER (Kelas A)
+- 16.30 - 19.00 | SEMINAR (Kelas A)
+
+Sabtu:
+- 08.00 - 10.30 | MEKANIKA KUANTUM (Kelas A)
+- 10.45 - 13.15 | MEKANIKA STATISTIK (Kelas A)
+- 16.35 - 18.15 | METODE PENELITIAN (Kelas B)
+
+=====================================================
+Jadwal Trigger Bot (Menit ke-2 setelah kelas mulai):
+Rabu   : 14:02, 16:37
+Kamis  : 14:02
+Jumat  : 08:02, 09:52, 16:32
+Sabtu  : 08:02, 10:47, 16:37

@@ -1,0 +1,54 @@
+name: Absen Otomatis SIMKULIAH
+
+on:
+  schedule:
+    # --- JADWAL UTC (WIB - 7 Jam) ---
+    # Rabu (Day 3)
+    - cron: '2 7 * * 3'    # 14:02 WIB
+    - cron: '37 9 * * 3'   # 16:37 WIB
+
+    # Kamis (Day 4)
+    - cron: '2 7 * * 4'    # 14:02 WIB
+
+    # Jumat (Day 5)
+    - cron: '2 1 * * 5'    # 08:02 WIB
+    - cron: '52 2 * * 5'   # 09:52 WIB
+    - cron: '32 9 * * 5'   # 16:32 WIB
+
+    # Sabtu (Day 6)
+    - cron: '2 1 * * 6'    # 08:02 WIB
+    - cron: '47 3 * * 6'   # 10:47 WIB
+    - cron: '37 9 * * 6'   # 16:37 WIB
+
+  workflow_dispatch: # Memungkinkan kita menjalankan manual dari menu "Actions"
+
+jobs:
+  absen-job:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: Install Google Chrome
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          
+      - name: Install Requirements
+        run: pip install -r requirements.txt
+        
+      - name: Run Absen Script
+        env:
+          BIRRUL_NIM: ${{ secrets.BIRRUL_NIM }}
+          BIRRUL_PASS: ${{ secrets.BIRRUL_PASS }}
+          BIRRUL_CHAT_ID: ${{ secrets.BIRRUL_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          HEADLESS_MODE: true
+        run: python absen_cron.py
