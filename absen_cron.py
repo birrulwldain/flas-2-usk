@@ -39,7 +39,7 @@ def solve_captcha_gemini(image_path):
         return None
 
 def main_absen():
-    bot.send_message(chatid, "Menjalankan Absen Otomatis via GitHub Actions...")
+    status_msg = bot.send_message(chatid, "⏳ Menjalankan Absen Otomatis via GitHub Actions...")
     
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument("--incognito")
@@ -55,32 +55,48 @@ def main_absen():
         
         driver.get("https://simkuliah.usk.ac.id/index.php/login")
         
-        driver.find_element(By.XPATH, "//input[@placeholder='NIP/NPM']").send_keys(nim)
-        driver.find_element(By.XPATH, "//input[@placeholder='Password']").send_keys(passw)
+        max_retries = 3
+        sukses = False
+        alasan_gagal = ""
         
-        captcha_img = driver.find_element(By.XPATH, "//img[contains(@src, 'captcha_image')]")
-        captcha_img.screenshot('captcha.png')
-        
-        auto_code = solve_captcha_gemini('captcha.png')
-        
-        if auto_code:
-            bot.send_photo(chatid, photo=open('captcha.png', 'rb'), 
-                           caption=f"Gemini menebak kode: {auto_code}. Mencoba login otomatis...")
+        for attempt in range(max_retries):
+            bot.edit_message_text(f"⏳ Percobaan {attempt+1}/{max_retries}: Menganalisis Captcha...", chat_id=chatid, message_id=status_msg.message_id)
             
-            # Submit
+            try:
+                driver.find_element(By.XPATH, "//input[@placeholder='NIP/NPM']").clear()
+                driver.find_element(By.XPATH, "//input[@placeholder='NIP/NPM']").send_keys(nim)
+                driver.find_element(By.XPATH, "//input[@placeholder='Password']").clear()
+                driver.find_element(By.XPATH, "//input[@placeholder='Password']").send_keys(passw)
+            except: pass
+            
+            captcha_img = driver.find_element(By.XPATH, "//img[contains(@src, 'captcha_image')]")
+            captcha_img.screenshot('captcha.png')
+            
+            auto_code = solve_captcha_gemini('captcha.png')
+            
+            if not auto_code:
+                alasan_gagal = "Gemini Error API Limit (429)."
+                break
+                
+            bot.edit_message_text(f"⏳ Percobaan {attempt+1}/{max_retries}: Gemini menebak '{auto_code}'. Sedang login...", chat_id=chatid, message_id=status_msg.message_id)
+            
+            driver.find_element(By.ID, "captcha_answer").clear()
             driver.find_element(By.ID, "captcha_answer").send_keys(auto_code)
             
-            driver.save_screenshot('before_login.png')
-            bot.send_photo(chatid, photo=open('before_login.png', 'rb'), caption="Screenshot sebelum klik Login")
-            
             driver.find_element(By.XPATH, "//button[contains(., 'Login')]").click()
-            time.sleep(2)
+            time.sleep(3)
             
-            if "login" in driver.current_url.lower():
-                 bot.send_message(chatid, "Login gagal. Captcha mungkin salah. Bot Github Actions berhenti di sini.")
-                 return
-                 
-            # Proses Absen di dalam Portal
+            if "login" not in driver.current_url.lower():
+                bot.edit_message_text(f"✅ Login Berhasil (Percobaan {attempt+1})!", chat_id=chatid, message_id=status_msg.message_id)
+                sukses = True
+                break
+            else:
+                alasan_gagal = "Captcha ditebak salah."
+                driver.refresh()
+                time.sleep(2)
+                
+        if sukses:
+            # Lanjut ke proses Absen Portal
             try:
                 absen1_button = driver.find_element(By.XPATH, '//*[@id="konfirmasi-kehadiran"]')
                 absen1_button.click()
@@ -95,23 +111,35 @@ def main_absen():
                 bot.send_message(chatid, "Belum masuk waktu absen atau sudah absen.")
                 driver.get_screenshot_as_file('creen.png')
                 bot.send_photo(chatid, photo=open('creen.png', 'rb'))
-                
+            if os.path.exists('captcha.png'): os.remove('captcha.png')
         else:
+            bot.edit_message_text(f"❌ Auto-Login Gagal ({alasan_gagal})", chat_id=chatid, message_id=status_msg.message_id)
             msg = bot.send_photo(chatid, photo=open('captcha.png', 'rb'), 
-                                 caption="Gemini gagal (mungkin limit habis). Anda punya waktu 3 MENIT untuk membalas pesan ini dengan kode Captcha secara manual:")
+                                 caption="Anda punya waktu 3 MENIT untuk membalas pesan ini dengan kode Captcha secara manual:")
+            if os.path.exists('captcha.png'): os.remove('captcha.png')
             
             def process_captcha_manual(message):
                 try:
                     manual_code = message.text
+                    
+                    try:
+                        driver.find_element(By.XPATH, "//input[@placeholder='NIP/NPM']").clear()
+                        driver.find_element(By.XPATH, "//input[@placeholder='NIP/NPM']").send_keys(nim)
+                        driver.find_element(By.XPATH, "//input[@placeholder='Password']").clear()
+                        driver.find_element(By.XPATH, "//input[@placeholder='Password']").send_keys(passw)
+                    except: pass
+                    
+                    driver.find_element(By.ID, "captcha_answer").clear()
                     driver.find_element(By.ID, "captcha_answer").send_keys(manual_code)
                     driver.save_screenshot('before_login.png')
                     bot.send_photo(chatid, photo=open('before_login.png', 'rb'), caption="Screenshot sebelum klik Login (Manual)")
+                    if os.path.exists('before_login.png'): os.remove('before_login.png')
                     
                     driver.find_element(By.XPATH, "//button[contains(., 'Login')]").click()
-                    time.sleep(2)
+                    time.sleep(3)
                     
                     if "login" in driver.current_url.lower():
-                         bot.send_message(chatid, "Login gagal. Captcha manual salah.")
+                         bot.send_message(chatid, "❌ Validasi Manual Gagal: Captcha manual salah. Browser akan dimatikan.")
                     else:
                         # Proses Absen di dalam Portal
                         try:
@@ -137,8 +165,7 @@ def main_absen():
             def timeout_polling():
                 try:
                     bot.send_message(chatid, "Waktu tunggu manual (3 menit) sudah habis. GitHub Actions dihentikan.")
-                except:
-                    pass
+                except: pass
                 bot.stop_polling()
                 
             timer = threading.Timer(180.0, timeout_polling)

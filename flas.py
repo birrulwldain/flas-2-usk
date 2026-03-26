@@ -55,7 +55,7 @@ def solve_captcha_gemini(image_path):
 bot = telebot.TeleBot(api)
 #//*[@id="mCSB_1_container"]/ul/li[4]/a/span[2]
 def start_login(usnim, passwk, chatk, nama, mode='absen'):
-    """Tahap 1: Inisialisasi driver dan kirim Captcha ke user"""
+    """Tahap 1: Inisialisasi driver dan coba login otomatis hingga 3x"""
     try:
         chrome_options = webdriver.ChromeOptions()
         chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
@@ -68,59 +68,98 @@ def start_login(usnim, passwk, chatk, nama, mode='absen'):
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         
+        status_msg = bot.send_message(chatk, f"⏳ Memulai Absen Otomatis untuk '{nama}'...")
         driver.get("https://simkuliah.usk.ac.id/index.php/login")
         
-        # Isi NIM dan Password
-        driver.find_element(By.XPATH, "//input[@placeholder='NIP/NPM']").send_keys(usnim)
-        driver.find_element(By.XPATH, "//input[@placeholder='Password']").send_keys(passwk)
+        max_retries = 3
+        sukses = False
+        alasan_gagal = ""
         
-        # Ambil screenshot Captcha
-        captcha_img = driver.find_element(By.XPATH, "//img[contains(@src, 'captcha_image')]")
-        captcha_img.screenshot('captcha.png')
-        
-        # Coba selesaikan dengan Gemini
-        bot.send_message(chatk, f"Mencoba menyelesaikan Captcha otomatis untuk {nama}...")
-        auto_code = solve_captcha_gemini('captcha.png')
-        
-        if auto_code:
-            bot.send_photo(chatk, photo=open('captcha.png', 'rb'), 
-                           caption=f"Gemini menebak kode: {auto_code}. Mencoba login otomatis...")
-            # Panggil fungsi tahap 2 secara langsung (mocking message object)
-            class MockMessage:
-                def __init__(self, text):
-                    self.text = text
-            process_captcha_step(MockMessage(auto_code), driver, usnim, passwk, chatk, nama, mode)
+        for attempt in range(max_retries):
+            bot.edit_message_text(f"⏳ Percobaan {attempt+1}/{max_retries}: Menganalisis Captcha...", chat_id=chatk, message_id=status_msg.message_id)
+            
+            # Jika ngulang (refresh web), pastikan form NIM tidak kosong
+            try:
+                driver.find_element(By.XPATH, "//input[@placeholder='NIP/NPM']").clear()
+                driver.find_element(By.XPATH, "//input[@placeholder='NIP/NPM']").send_keys(usnim)
+                driver.find_element(By.XPATH, "//input[@placeholder='Password']").clear()
+                driver.find_element(By.XPATH, "//input[@placeholder='Password']").send_keys(passwk)
+            except: pass
+            
+            # Ambil screenshot Captcha
+            captcha_img = driver.find_element(By.XPATH, "//img[contains(@src, 'captcha_image')]")
+            captcha_img.screenshot('captcha.png')
+            
+            # Tanya Gemini
+            auto_code = solve_captcha_gemini('captcha.png')
+            
+            if not auto_code:
+                alasan_gagal = "Gemini Error API Limit (429)."
+                break # Keluar dari loop untuk langsung manual fallback
+                
+            bot.edit_message_text(f"⏳ Percobaan {attempt+1}/{max_retries}: Gemini menebak '{auto_code}'. Sedang login...", chat_id=chatk, message_id=status_msg.message_id)
+            
+            driver.find_element(By.ID, "captcha_answer").clear()
+            driver.find_element(By.ID, "captcha_answer").send_keys(auto_code)
+            driver.find_element(By.XPATH, "//button[contains(., 'Login')]").click()
+            
+            time.sleep(3) # Tunggu loading page
+            
+            if "login" not in driver.current_url.lower():
+                bot.edit_message_text(f"✅ Login Berhasil (Percobaan {attempt+1}) untuk {nama}!", chat_id=chatk, message_id=status_msg.message_id)
+                sukses = True
+                break
+            else:
+                alasan_gagal = "Captcha ditebak salah."
+                # Refresh browser karena tebakan salah, untuk ganti gambar Captcha
+                driver.refresh()
+                time.sleep(2)
+                
+        # Evaluasi Hasil Loop
+        if sukses:
+            # Lanjut ke proses absen
+            if mode == 'cekkuliah':
+                finish_cekkuliah(driver, chatk, nama)
+            else:
+                finish_absen(driver, usnim, passwk, chatk, nama)
+            if os.path.exists('captcha.png'): os.remove('captcha.png')
         else:
-            msg = bot.send_photo(chatk, photo=open('captcha.png', 'rb'), 
-                                 caption=f"Gemini gagal absen otomatis untuk {nama}.\nMasukkan kode Captcha secara manual:")
-            bot.register_next_step_handler(msg, process_captcha_step, driver, usnim, passwk, chatk, nama, mode)
-        
-        if os.path.exists('captcha.png'):
-            os.remove('captcha.png')
-        
+            # Fallback ke Input Manual Telegram
+            bot.edit_message_text(f"❌ Auto-Login Gagal ({alasan_gagal})", chat_id=chatk, message_id=status_msg.message_id)
+            msg = bot.send_photo(chatk, photo=open('captcha.png', 'rb'), caption=f"Silakan ketik kode Captcha secara manual untuk {nama}:")
+            bot.register_next_step_handler(msg, process_captcha_manual, driver, usnim, passwk, chatk, nama, mode)
+            if os.path.exists('captcha.png'): os.remove('captcha.png')
+            
     except Exception as e:
-        bot.send_message(chatk, f"Gagal memulai login untuk {nama}: {e}")
+        bot.send_message(chatk, f"Gagal memulai login otomatis: {e}")
         if 'driver' in locals():
             driver.quit()
 
-def process_captcha_step(message, driver, usnim, passwk, chatk, nama, mode):
-    """Tahap 2: Masukkan captcha dan selesaikan login"""
+def process_captcha_manual(message, driver, usnim, passwk, chatk, nama, mode):
+    """Tahap 2: Menerima input Captcha Manual Telegram dan lanjut login"""
     try:
-        captcha_code = message.text
-        driver.find_element(By.ID, "captcha_answer").send_keys(captcha_code)
+        user_code = message.text
         
-        # Ambil screenshot untuk bukti
+        try:
+            driver.find_element(By.XPATH, "//input[@placeholder='NIP/NPM']").clear()
+            driver.find_element(By.XPATH, "//input[@placeholder='NIP/NPM']").send_keys(usnim)
+            driver.find_element(By.XPATH, "//input[@placeholder='Password']").clear()
+            driver.find_element(By.XPATH, "//input[@placeholder='Password']").send_keys(passwk)
+        except: pass
+        
+        driver.find_element(By.ID, "captcha_answer").clear()
+        driver.find_element(By.ID, "captcha_answer").send_keys(user_code)
+        
+        # Simpan bukti sebelum diklik
         driver.save_screenshot('before_login.png')
-        bot.send_photo(chatk, photo=open('before_login.png', 'rb'), caption="Screenshot sebelum klik Login")
-        if os.path.exists('before_login.png'):
-            os.remove('before_login.png')
-            
+        bot.send_photo(chatk, photo=open('before_login.png', 'rb'), caption="Screenshot sebelum klik Login (Manual)")
+        if os.path.exists('before_login.png'): os.remove('before_login.png')
+
         driver.find_element(By.XPATH, "//button[contains(., 'Login')]").click()
+        time.sleep(3)
         
-        time.sleep(2)
-        # Cek apakah login berhasil (misal cek apakah masih di halaman login)
         if "login" in driver.current_url.lower():
-             bot.send_message(chatk, f"Login gagal untuk {nama}. Mungkin captcha salah. Silakan coba lagi dengan command.")
+             bot.send_message(chatk, f"❌ Validasi Manual Gagal: Captcha '{user_code}' masih salah untuk {nama}. Browser dimatikan.")
              driver.quit()
              return
 
@@ -128,6 +167,10 @@ def process_captcha_step(message, driver, usnim, passwk, chatk, nama, mode):
             finish_cekkuliah(driver, chatk, nama)
         else:
             finish_absen(driver, usnim, passwk, chatk, nama)
+            
+    except Exception as e:
+        bot.send_message(chatk, f"Terjadi kesalahan saat memproses Captcha manual: {e}")
+        driver.quit()
             
     except Exception as e:
         bot.send_message(chatk, f"Error saat memproses captcha {nama}: {e}")
