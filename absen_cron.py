@@ -97,8 +97,55 @@ def main_absen():
                 bot.send_photo(chatid, photo=open('creen.png', 'rb'))
                 
         else:
-            bot.send_photo(chatid, photo=open('captcha.png', 'rb'), 
-                             caption="Gemini gagal absen otomatis. Karena script berjalan di GitHub Actions, proses dihentikan.")
+            msg = bot.send_photo(chatid, photo=open('captcha.png', 'rb'), 
+                                 caption="Gemini gagal (mungkin limit habis). Anda punya waktu 3 MENIT untuk membalas pesan ini dengan kode Captcha secara manual:")
+            
+            def process_captcha_manual(message):
+                try:
+                    manual_code = message.text
+                    driver.find_element(By.ID, "captcha_answer").send_keys(manual_code)
+                    driver.save_screenshot('before_login.png')
+                    bot.send_photo(chatid, photo=open('before_login.png', 'rb'), caption="Screenshot sebelum klik Login (Manual)")
+                    
+                    driver.find_element(By.XPATH, "//button[contains(., 'Login')]").click()
+                    time.sleep(2)
+                    
+                    if "login" in driver.current_url.lower():
+                         bot.send_message(chatid, "Login gagal. Captcha manual salah.")
+                    else:
+                        # Proses Absen di dalam Portal
+                        try:
+                            absen1_button = driver.find_element(By.XPATH, '//*[@id="konfirmasi-kehadiran"]')
+                            absen1_button.click()
+                            time.sleep(3)
+                            absen2_button = driver.find_element(By.XPATH, '/html/body/div[4]/div[7]/div/button')
+                            absen2_button.click()
+                            time.sleep(3)
+                            driver.refresh()
+                            driver.get_screenshot_as_file('creen.png')
+                            bot.send_photo(chatid, photo=open('creen.png', 'rb'), caption="Berhasil Absen Otomatis (Manual Input)!")
+                        except NoSuchElementException:
+                            bot.send_message(chatid, "Belum masuk waktu absen atau sudah absen.")
+                            driver.get_screenshot_as_file('creen.png')
+                            bot.send_photo(chatid, photo=open('creen.png', 'rb'))
+                finally:
+                    bot.stop_polling()
+
+            bot.register_next_step_handler(msg, process_captcha_manual)
+            
+            import threading
+            def timeout_polling():
+                try:
+                    bot.send_message(chatid, "Waktu tunggu manual (3 menit) sudah habis. GitHub Actions dihentikan.")
+                except:
+                    pass
+                bot.stop_polling()
+                
+            timer = threading.Timer(180.0, timeout_polling)
+            timer.start()
+            
+            bot.polling(none_stop=True)
+            timer.cancel()
                              
     except Exception as e:
         bot.send_message(chatid, f"Gagal memulai login: {e}")
