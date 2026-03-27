@@ -1,0 +1,24 @@
+services:
+  - type: worker
+    name: simkuliah-absen-bot
+    env: docker
+    plan: free
+    dockerCommand: python -u flas.py
+    envVars:
+      # Variabel krusial (Isi ini saat di Dashboard Render.com)
+      - key: BIRRUL_NIM
+        sync: false
+      - key: BIRRUL_PASS
+        sync: false
+      - key: BIRRUL_CHAT_ID
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      
+      # Konfigurasi Mutlak Chrome dan Waktu
+      - key: HEADLESS_MODE
+        value: true
+      - key: TZ
+        value: Asia/Jakarta
