@@ -21,7 +21,8 @@ on:
     - cron: '37 9 * * 6'   # 16:37 WIB
 
   workflow_dispatch: # Memungkinkan kita menjalankan manual dari menu "Actions"
-
+  repository_dispatch:
+    types: [trigger-absen] # Membuka akses Webhook untuk Cron-Job.org
 jobs:
   absen-job:
     runs-on: ubuntu-latest
