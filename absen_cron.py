@@ -164,14 +164,15 @@ def main_absen():
             import threading
             def timeout_polling():
                 try:
-                    bot.send_message(chatid, "Waktu tunggu manual (3 menit) sudah habis. GitHub Actions dihentikan.")
+                    bot.send_message(chatid, "⏳ Waktu tunggu manual (3 menit) habis. GitHub Actions dihentikan.")
                 except: pass
                 bot.stop_polling()
                 
             timer = threading.Timer(180.0, timeout_polling)
             timer.start()
             
-            bot.polling(none_stop=True)
+            # Abaikan tumpukan pesan lama di Telegram sebelum memulai polling!
+            bot.polling(none_stop=True, skip_pending=True)
             timer.cancel()
                              
     except Exception as e:
