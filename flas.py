@@ -301,8 +301,8 @@ if __name__ == '__main__':
     schedule.every().saturday.at("08:02").do(absenbirul)
     schedule.every().saturday.at("10:47").do(absenbirul)
     schedule.every().saturday.at("16:37").do(absenbirul)
-    Thread(target=ascek).start()
-    bot.polling()
+    # Mode polling: Abaikan semua pesan lama yang ngantre saat bot baru nyala
+    bot.polling(none_stop=True, skip_pending=True)
 # CHROMEDRIVER_PATH = /app/.chromedriver/bin/chromedriver
 # https://github.com/heroku/heroku-buildpack-google-chrome
 # https://github.com/heroku/heroku-buildpack-chromedriver
